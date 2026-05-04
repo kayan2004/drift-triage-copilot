@@ -13,8 +13,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install uv
-      - run: cd agent && uv sync
-      - run: cd agent && uv run ruff check .
+      - run: cd agent && uv sync --frozen
+      - run: cd agent && uvx ruff check .
 
   test-agent:
     runs-on: ubuntu-latest
@@ -42,8 +42,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install uv
-      - run: cd model_service && uv sync
-      - run: cd model_service && uv run ruff check .
+      - run: cd model_service && uv sync --frozen
+      - run: cd model_service && uvx ruff check .
 
   test-model-service:
     runs-on: ubuntu-latest
