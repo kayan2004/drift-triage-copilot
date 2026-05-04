@@ -57,8 +57,17 @@ async def approve_investigation(
         approver_note=body.approver_note,
     )
 
-    # Resume the graph from the interrupt point with hil_approved=True
-    await graph.aupdate_state(config, {"hil_approved": True, "hil_token": detail.hil_token})
+    # Resume the graph from the interrupt point with hil_approved=True.
+    # Re-inject non-serializable singletons (lost across checkpoint boundary).
+    await graph.aupdate_state(
+        config,
+        {
+            "hil_approved": True,
+            "hil_token": detail.hil_token,
+            "llm_client": request.app.state.llm,
+            "redis_client": request.app.state.redis,
+        },
+    )
 
     # Continue running the graph
     async for chunk in graph.astream(None, config=config):

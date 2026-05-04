@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import anthropic
@@ -6,7 +7,8 @@ import structlog
 from pydantic import ValidationError
 
 from app.graph.supervisor import InvestigationState
-from app.schemas.tool_io import ActionDecision
+from app.queue.producer import enqueue_job
+from app.schemas.tool_io import ActionDecision, QueueJob
 
 log = structlog.get_logger()
 
@@ -66,13 +68,23 @@ async def action_agent_node(state: InvestigationState) -> dict:
     if decision.chosen_action in PRODUCTION_ACTIONS:
         decision = decision.model_copy(update={"requires_human_approval": True})
 
-    # If HIL approved and action ready to dispatch, assign a queue job ID
+    # If HIL approved and action ready to dispatch, assign a queue job ID and enqueue
     if not decision.requires_human_approval or hil_approved:
         if decision.chosen_action not in ("monitor_only", "await_human"):
             job_id = str(uuid.uuid4())
             decision = decision.model_copy(update={"queue_job_id": job_id})
+            drift_event = state["drift_event"]
+            queue_job = QueueJob(
+                job_id=job_id,
+                job_type=decision.chosen_action,  # type: ignore[arg-type]
+                model_name=drift_event.model_name,
+                model_version=drift_event.model_version,
+                investigation_id=state["investigation_id"],
+                created_at=datetime.now(tz=UTC),
+            )
+            await enqueue_job(state["redis_client"], queue_job)
             log.info(
-                "action_agent.job_assigned",
+                "action_agent.job_enqueued",
                 investigation_id=state["investigation_id"],
                 job_id=job_id,
                 action=decision.chosen_action,

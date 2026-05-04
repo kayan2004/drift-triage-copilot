@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import anthropic
+import redis.asyncio as aioredis
 import structlog
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
@@ -29,6 +30,7 @@ class InvestigationState(TypedDict):
     comms_result: CommsReport | None
     investigation_id: str
     llm_client: anthropic.AsyncAnthropic  # injected at graph invocation, never re-created
+    redis_client: aioredis.Redis  # injected at graph invocation, never re-created
     messages: Annotated[list[Any], lambda a, b: a + b]
 
 

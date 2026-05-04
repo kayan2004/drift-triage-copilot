@@ -45,6 +45,7 @@ async def _run_investigation(
             "comms_result": None,
             "investigation_id": investigation_id,
             "llm_client": request.app.state.llm,
+            "redis_client": request.app.state.redis,
             "messages": [],
         }
         async for chunk in graph.astream(initial_state, config=config):

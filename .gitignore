@@ -14,3 +14,5 @@ mlruns/
 .pytest_cache/
 training/data/
 *.npy
+project.txt
+DRIFT_TRIAGE_PLAN.md
