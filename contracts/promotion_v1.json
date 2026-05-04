@@ -1,0 +1,9 @@
+{
+  "version": "v1",
+  "model_version": "2",
+  "approved_by": "human",
+  "action": "promote",
+  "investigation_id": "inv_abc123",
+  "approval_token": "tok_xyz789",
+  "timestamp": "2026-05-04T11:00:00Z"
+}
