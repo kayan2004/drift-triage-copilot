@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install uv
-      - run: cd agent && uv sync --no-dev
+      - run: cd agent && uv sync
       - run: cd agent && uv run ruff check .
 
   test-agent:
@@ -42,13 +42,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install uv
-      - run: cd model_service && uv sync --no-dev
-      - run: |
-          if find model_service/app -name "*.py" ! -name "__init__.py" | grep -q .; then
-            cd model_service && uv run ruff check .
-          else
-            echo "model_service not yet implemented — skipping lint"
-          fi
+      - run: cd model_service && uv sync
+      - run: cd model_service && uv run ruff check .
 
   test-model-service:
     runs-on: ubuntu-latest
