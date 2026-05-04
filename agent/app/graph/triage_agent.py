@@ -35,7 +35,7 @@ async def triage_agent_node(state: InvestigationState) -> dict:
         event_id=event.event_id,
     )
 
-    # Fetch full drift report from model service (best-effort — proceed with webhook data on failure)
+    # Fetch full drift report from model service (best-effort — fall back to webhook data)
     full_report = await fetch_drift_report(event.drift_report_id)
     if isinstance(full_report, ToolError):
         log.warning(

@@ -77,7 +77,10 @@ def _fallback_report(event, action) -> CommsReport:
     chosen = action.chosen_action if action else "monitor_only"
     status = "resolved" if chosen == "monitor_only" else "escalated"
     return CommsReport(
-        summary=f"Drift event ({event.severity}) detected on {event.model_name} v{event.model_version}.",
+        summary=(
+            f"Drift event ({event.severity}) detected on "
+            f"{event.model_name} v{event.model_version}."
+        ),
         actions_taken=[chosen] if chosen != "monitor_only" else [],
         next_steps="Monitor model performance and check queue for job status.",
         investigation_status=status,

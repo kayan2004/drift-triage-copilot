@@ -7,7 +7,6 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from typing_extensions import TypedDict
 
-from app.schemas.hil import InvestigationSummary
 from app.schemas.tool_io import ActionDecision, CommsReport, TriageAssessment
 from app.schemas.webhook import DriftWebhookPayload
 
@@ -79,7 +78,11 @@ async def await_hil_node(state: InvestigationState) -> dict:
     log.info(
         "supervisor.hil_interrupt",
         investigation_id=state["investigation_id"],
-        proposed_action=state["action_decision"].chosen_action if state.get("action_decision") else None,
+        proposed_action=(
+            state["action_decision"].chosen_action
+            if state.get("action_decision")
+            else None
+        ),
     )
     # LangGraph interrupt — execution pauses here until resumed with hil_approved=True
     interrupt("Awaiting human approval before dispatching action to queue.")

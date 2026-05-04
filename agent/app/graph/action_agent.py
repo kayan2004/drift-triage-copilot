@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 
 import anthropic
@@ -7,7 +6,7 @@ import structlog
 from pydantic import ValidationError
 
 from app.graph.supervisor import InvestigationState
-from app.schemas.tool_io import ActionDecision, QueueJob, ToolError
+from app.schemas.tool_io import ActionDecision
 
 log = structlog.get_logger()
 
@@ -32,7 +31,6 @@ SYSTEM_PROMPT, USER_TEMPLATE = _parse_system_and_user(ACTION_PROMPT)
 async def action_agent_node(state: InvestigationState) -> dict:
     triage = state["triage_result"]
     hil_approved = state.get("hil_approved", False)
-    event = state["drift_event"]
 
     log.info(
         "action_agent.start",

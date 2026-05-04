@@ -5,7 +5,7 @@ HIL endpoints that resume it.  Replaced by a real DB in a later phase.
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.schemas.hil import InvestigationDetail, InvestigationSummary
 from app.schemas.webhook import DriftWebhookPayload
@@ -16,8 +16,10 @@ class InvestigationStore:
         self._lock = asyncio.Lock()
         self._store: dict[str, InvestigationDetail] = {}
 
-    async def create(self, event: DriftWebhookPayload, investigation_id: str) -> InvestigationDetail:
-        now = datetime.now(timezone.utc)
+    async def create(
+        self, event: DriftWebhookPayload, investigation_id: str
+    ) -> InvestigationDetail:
+        now = datetime.now(UTC)
         detail = InvestigationDetail(
             investigation_id=investigation_id,
             event_id=event.event_id,
@@ -48,7 +50,7 @@ class InvestigationStore:
             detail = self._store.get(investigation_id)
             if detail is None:
                 return
-            updates: dict = {"status": status, "updated_at": datetime.now(timezone.utc)}
+            updates: dict = {"status": status, "updated_at": datetime.now(UTC)}
             if triage_summary is not None:
                 updates["triage_summary"] = triage_summary
             if proposed_action is not None:
