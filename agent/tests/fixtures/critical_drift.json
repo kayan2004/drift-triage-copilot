@@ -1,0 +1,39 @@
+{
+  "input_event": {
+    "event_id": "evt-critical-001",
+    "event_type": "drift_alert",
+    "timestamp": "2025-05-01T10:00:00Z",
+    "severity": "critical",
+    "previous_severity": "warn",
+    "model_name": "bank_churn_classifier",
+    "model_version": "1",
+    "drift_report_id": "rpt-001",
+    "psi_summary": {"euribor3m": 0.35, "cons_price_idx": 0.28},
+    "chi2_summary": {"job": 0.005, "education": 0.008},
+    "output_drift": 0.14,
+    "webhook_version": "1.0"
+  },
+  "triage_llm_response": {
+    "drifting_features": ["euribor3m", "cons_price_idx", "job"],
+    "drift_hypothesis": "distribution_shift",
+    "recommended_actions": ["retrain"],
+    "urgency": "critical"
+  },
+  "action_llm_response": {
+    "chosen_action": "retrain",
+    "requires_human_approval": true,
+    "justification": "Critical drift across macroeconomic features; retraining required.",
+    "queue_job_id": null
+  },
+  "comms_llm_response": {
+    "summary": "Critical drift detected on bank_churn_classifier v1. Retrain dispatched after human approval.",
+    "actions_taken": ["retrain"],
+    "next_steps": "Monitor retrained model metrics before promoting to production.",
+    "investigation_status": "escalated"
+  },
+  "expected": {
+    "requires_hil": true,
+    "chosen_action": "retrain",
+    "triage_urgency": "critical"
+  }
+}

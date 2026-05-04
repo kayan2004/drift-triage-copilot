@@ -1,0 +1,39 @@
+{
+  "input_event": {
+    "event_id": "evt-ok-001",
+    "event_type": "drift_alert",
+    "timestamp": "2025-05-01T12:00:00Z",
+    "severity": "ok",
+    "previous_severity": "warn",
+    "model_name": "bank_churn_classifier",
+    "model_version": "1",
+    "drift_report_id": "rpt-003",
+    "psi_summary": {"euribor3m": 0.05},
+    "chi2_summary": {"job": 0.12},
+    "output_drift": 0.02,
+    "webhook_version": "1.0"
+  },
+  "triage_llm_response": {
+    "drifting_features": [],
+    "drift_hypothesis": "unknown",
+    "recommended_actions": ["monitor_only"],
+    "urgency": "low"
+  },
+  "action_llm_response": {
+    "chosen_action": "monitor_only",
+    "requires_human_approval": false,
+    "justification": "Drift resolved to ok. No action needed.",
+    "queue_job_id": null
+  },
+  "comms_llm_response": {
+    "summary": "Drift on bank_churn_classifier v1 resolved to ok severity.",
+    "actions_taken": [],
+    "next_steps": "Continue monitoring.",
+    "investigation_status": "resolved"
+  },
+  "expected": {
+    "requires_hil": false,
+    "chosen_action": "monitor_only",
+    "triage_urgency": "low"
+  }
+}
