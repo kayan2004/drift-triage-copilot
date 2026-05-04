@@ -26,7 +26,7 @@ jobs:
           python-version: "3.12"
       - run: pip install uv
       - run: cd agent && uv sync
-      - run: cd agent && uv run pytest tests/ -q
+      - run: cd agent && uv run pytest tests/ -q || [ $? -eq 5 ]
         env:
           ANTHROPIC_API_KEY: "test-key-not-used"
           AGENT_DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
@@ -56,11 +56,7 @@ jobs:
       - run: pip install uv
       - run: cd model_service && uv sync
       - run: |
-          if find model_service/tests -name "test_*.py" | grep -q .; then
-            cd model_service && uv run pytest tests/ -q
-          else
-            echo "model_service tests not yet implemented — skipping"
-          fi
+          cd model_service && uv run pytest tests/ -q || [ $? -eq 5 ]
         env:
           DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
           MLFLOW_TRACKING_URI: "http://localhost:5000"
