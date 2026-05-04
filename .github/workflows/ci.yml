@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install uv
+      - run: cd agent && uv sync --no-dev
+      - run: cd agent && uv run ruff check .
+
+  test-agent:
+    runs-on: ubuntu-latest
+    needs: lint-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install uv
+      - run: cd agent && uv sync
+      - run: cd agent && uv run pytest tests/ -q
+        env:
+          ANTHROPIC_API_KEY: "test-key-not-used"
+          AGENT_DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
+          MODEL_SERVICE_URL: "http://localhost:8000"
+          REDIS_URL: "redis://localhost:6379/0"
+          WEBHOOK_SECRET: "test-secret"
+
+  lint-model-service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install uv
+      - run: cd model_service && uv sync --no-dev
+      - run: cd model_service && uv run ruff check .
+
+  test-model-service:
+    runs-on: ubuntu-latest
+    needs: lint-model-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install uv
+      - run: cd model_service && uv sync
+      - run: cd model_service && uv run pytest tests/ -q
+        env:
+          DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
+          MLFLOW_TRACKING_URI: "http://localhost:5000"
+          MODEL_NAME: "bank_churn_classifier"
+          REDIS_URL: "redis://localhost:6379/0"
+          WEBHOOK_SECRET: "test-secret"
+
+  build-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
