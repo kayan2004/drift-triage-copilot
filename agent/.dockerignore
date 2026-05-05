@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.env.*
+.venv/
+__pycache__/
+*.py[cod]
+tests/
+*.md
+.coverage
+.pytest_cache/
+.ruff_cache/
+migrations/
+alembic.ini
