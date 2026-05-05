@@ -27,8 +27,6 @@ class InvestigationState(TypedDict):
     hil_token: str | None
     comms_result: CommsReport | None
     investigation_id: str
-    # llm_client and redis_client are passed via config["configurable"] — never in state
-    # because AsyncPostgresSaver cannot serialize them.
     messages: Annotated[list[Any], lambda a, b: a + b]
 
 

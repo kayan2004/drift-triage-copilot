@@ -16,7 +16,7 @@ import redis.asyncio as aioredis
 import structlog
 from pydantic import ValidationError
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.schemas.tool_io import QueueJob, ToolError
 from app.tools.replay_test import replay_test_handler
 from app.tools.retrain_model import retrain_handler
@@ -26,7 +26,6 @@ log = structlog.get_logger()
 
 _JOBS_KEY = "triage:jobs"
 _DLQ_KEY = "triage:dlq"
-_BRPOP_TIMEOUT = 5  # seconds — allows clean shutdown on SIGTERM
 
 _HANDLERS = {
     "replay_test": replay_test_handler,
@@ -35,12 +34,11 @@ _HANDLERS = {
 }
 
 
-def _backoff_seconds(attempt: int) -> float:
-    """Exponential backoff: 2^attempt capped at 60 s."""
-    return min(60.0, math.pow(2, attempt))
+def _backoff_seconds(attempt: int, base: float = 2.0, cap: float = 60.0) -> float:
+    return min(cap, math.pow(base, attempt))
 
 
-async def _process_job(redis_client: aioredis.Redis, job: QueueJob) -> None:
+async def _process_job(redis_client: aioredis.Redis, job: QueueJob, settings: Settings) -> None:
     handler = _HANDLERS.get(job.job_type)
     if handler is None:
         log.error("worker.unknown_job_type", job_type=job.job_type, job_id=job.job_id)
@@ -58,8 +56,8 @@ async def _process_job(redis_client: aioredis.Redis, job: QueueJob) -> None:
     result: dict | ToolError = await handler(job)
 
     if isinstance(result, ToolError):
-        if result.retryable and job.attempt < job.max_attempts - 1:
-            delay = _backoff_seconds(job.attempt)
+        if result.retryable and job.attempt < settings.max_retries:
+            delay = _backoff_seconds(job.attempt, settings.retry_backoff_base_s, settings.retry_backoff_max_s)
             next_job = job.model_copy(update={"attempt": job.attempt + 1})
             log.warning(
                 "worker.retrying",
@@ -99,12 +97,18 @@ async def _send_to_dlq(redis_client: aioredis.Redis, job: QueueJob, error: str) 
 
 async def run_worker() -> None:
     settings = get_settings()
-    redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
-    log.info("worker.started", queue=_JOBS_KEY)
+    redis_client = aioredis.from_url(settings.queue_redis_url, decode_responses=True)
+    log.info(
+        "worker.started",
+        queue=_JOBS_KEY,
+        concurrency=settings.worker_concurrency,
+        job_timeout_s=settings.job_timeout_s,
+        max_retries=settings.max_retries,
+    )
 
     try:
         while True:
-            item = await redis_client.brpop(_JOBS_KEY, timeout=_BRPOP_TIMEOUT)
+            item = await redis_client.brpop(_JOBS_KEY, timeout=int(settings.worker_reach_deadline_s))
             if item is None:
                 continue
 
@@ -115,7 +119,7 @@ async def run_worker() -> None:
                 log.error("worker.parse_error", raw=raw[:200], error=str(exc))
                 continue
 
-            await _process_job(redis_client, job)
+            await _process_job(redis_client, job, settings)
     except asyncio.CancelledError:
         log.info("worker.shutdown")
     finally:

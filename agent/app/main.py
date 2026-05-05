@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import anthropic
@@ -16,11 +17,13 @@ log = structlog.get_logger()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
 
     # Anthropic client — singleton, never instantiated inside graph nodes
-    app.state.llm = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    app.state.llm = anthropic.AsyncAnthropic(
+        api_key=settings.anthropic_api_key.get_secret_value()
+    )
 
     # Redis client
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
