@@ -85,8 +85,10 @@ async def _run_investigation(
                 status=final_status,
             )
     except Exception as exc:
+        # Background task: update status before re-raising so dashboard always reflects reality.
         log.error("investigation.error", investigation_id=investigation_id, error=str(exc))
         await store.update_status(investigation_id, status="escalated")
+        raise
 
 #^
 @router.post("/drift", status_code=202)

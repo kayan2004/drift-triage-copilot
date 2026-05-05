@@ -63,6 +63,6 @@ async def rollback_handler(job: QueueJob) -> dict | ToolError:
     except (httpx.TimeoutException, httpx.NetworkError) as exc:
         log.warning("rollback.network_error", job_id=job.job_id, error=str(exc))
         return ToolError(error=str(exc), retryable=True)
-    except Exception as exc:
-        log.error("rollback.unexpected_error", job_id=job.job_id, error=str(exc))
-        return ToolError(error=str(exc), retryable=False)
+    except httpx.HTTPStatusError as exc:
+        log.error("rollback.http_error", job_id=job.job_id, status=exc.response.status_code)
+        return ToolError(error=str(exc), retryable=exc.response.status_code >= 500)
