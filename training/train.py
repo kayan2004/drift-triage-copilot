@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import platform
 import tempfile
 from pathlib import Path
@@ -31,7 +32,7 @@ log = structlog.get_logger()
 TARGET = "y"
 PDAYS_SENTINEL = 999
 MODEL_NAME = "bank_churn_classifier"
-MLFLOW_URI = "http://localhost:5000"
+MLFLOW_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
 MIN_AUC = 0.75
 MIN_RECALL = 0.75
 

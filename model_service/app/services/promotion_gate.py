@@ -38,8 +38,8 @@ async def check_all(version: str, token: str, session: AsyncSession) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         card_path = await asyncio.to_thread(
             mlflow.artifacts.download_artifacts,
-            f"runs:/{mv.run_id}/model_card/model_card.json",
-            tmp,
+            artifact_uri=f"runs:/{mv.run_id}/model_card/model_card.json",
+            dst_path=tmp,
         )
         card: dict = json.loads(Path(card_path).read_text())
 

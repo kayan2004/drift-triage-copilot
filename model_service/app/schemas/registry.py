@@ -15,4 +15,4 @@ class ModelVersionInfo(BaseModel):
 
 
 class PromotionRequest(BaseModel):
-    version: str
+    pass

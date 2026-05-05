@@ -21,7 +21,7 @@ router = APIRouter(prefix="/registry", tags=["registry"])
 
 
 def _build_version_info(mv: Any, card: dict) -> ModelVersionInfo:
-    aliases = [mv.aliases[i].alias for i in range(len(mv.aliases))] if mv.aliases else []
+    aliases = list(mv.aliases) if mv.aliases else []
     return ModelVersionInfo(
         version=mv.version,
         aliases=aliases,
@@ -38,8 +38,8 @@ async def _fetch_card(run_id: str) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         path = await asyncio.to_thread(
             mlflow.artifacts.download_artifacts,
-            f"runs:/{run_id}/model_card/model_card.json",
-            tmp,
+            artifact_uri=f"runs:/{run_id}/model_card/model_card.json",
+            dst_path=tmp,
         )
         return json.loads(Path(path).read_text())
 
@@ -58,8 +58,8 @@ async def list_versions(
         try:
             card = await _fetch_card(mv.run_id)
             results.append(_build_version_info(mv, card))
-        except Exception:
-            log.warning("registry.card_fetch_failed", version=mv.version, run_id=mv.run_id)
+        except Exception as exc:
+            log.warning("registry.card_fetch_failed", version=mv.version, run_id=mv.run_id, error=str(exc))
     return results
 
 
