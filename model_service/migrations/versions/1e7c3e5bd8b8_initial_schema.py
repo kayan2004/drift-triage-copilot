@@ -47,22 +47,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    op.create_table(
-        "model_versions",
-        sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("name", sa.String(length=128), nullable=False),
-        sa.Column("version", sa.String(length=32), nullable=False),
-        sa.Column("alias", sa.String(length=64), nullable=True),
-        sa.Column("registered_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
-        sa.Column("model_hash", sa.String(length=64), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("version"),
-    )
-
 
 def downgrade() -> None:
-    op.drop_table("model_versions")
     op.drop_table("drift_reports")
     op.drop_table("predictions")
     op.execute("DROP TYPE IF EXISTS severity_enum")

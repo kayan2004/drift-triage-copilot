@@ -4,13 +4,14 @@ from pydantic import BaseModel
 
 
 class ModelVersionInfo(BaseModel):
-    model_config = {"from_attributes": True}
-
     version: str
-    alias: str | None
+    aliases: list[str]
+    run_id: str
     model_hash: str
-    is_active: bool
-    registered_at: datetime
+    training_date: str
+    test_auc: float
+    test_recall: float
+    threshold: float
 
 
 class PromotionRequest(BaseModel):

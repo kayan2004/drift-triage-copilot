@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, Enum as SAEnum, Float, Integer, String, Text
+from sqlalchemy import JSON, Enum as SAEnum, Float, Integer, String
 from sqlalchemy import text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -43,15 +43,3 @@ class DriftReport(Base):
     chi2_scores: Mapped[dict] = mapped_column(JSON, nullable=True)
     output_drift: Mapped[float] = mapped_column(Float, nullable=True)
     raw_report: Mapped[dict] = mapped_column(JSON, nullable=True)
-
-
-class ModelVersion(Base):
-    __tablename__ = "model_versions"
-
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(128), nullable=False)
-    version: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
-    alias: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    registered_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
-    model_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
