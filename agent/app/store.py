@@ -1,26 +1,30 @@
-"""In-memory investigation store.
+"""DB-backed investigation store.
 
-Holds investigation state between the webhook that starts a thread and the
-HIL endpoints that resume it.  Replaced by a real DB in a later phase.
+Same interface as the old in-memory store — callers don't change.
+Survives agent restarts because state lives in Postgres.
 """
-
-import asyncio
 from datetime import UTC, datetime
 
+import structlog
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.db.models import Investigation
 from app.schemas.hil import InvestigationDetail, InvestigationSummary
 from app.schemas.webhook import DriftWebhookPayload
 
+log = structlog.get_logger()
+
 
 class InvestigationStore:
-    def __init__(self) -> None:
-        self._lock = asyncio.Lock()
-        self._store: dict[str, InvestigationDetail] = {}
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = session_factory
 
     async def create(
         self, event: DriftWebhookPayload, investigation_id: str
     ) -> InvestigationDetail:
         now = datetime.now(UTC)
-        detail = InvestigationDetail(
+        row = Investigation(
             investigation_id=investigation_id,
             event_id=event.event_id,
             severity=event.severity,
@@ -30,12 +34,16 @@ class InvestigationStore:
             started_at=now,
             updated_at=now,
         )
-        async with self._lock:
-            self._store[investigation_id] = detail
-        return detail
+        async with self._factory() as session:
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+        return _to_detail(row)
 
     async def get(self, investigation_id: str) -> InvestigationDetail | None:
-        return self._store.get(investigation_id)
+        async with self._factory() as session:
+            row = await session.get(Investigation, investigation_id)
+        return _to_detail(row) if row else None
 
     async def update_status(
         self,
@@ -44,26 +52,57 @@ class InvestigationStore:
         triage_summary: str | None = None,
         proposed_action: str | None = None,
         hil_token: str | None = None,
-        messages: list[dict] | None = None,
+        messages: list[dict] | None = None,  # noqa: ARG002 — kept for API compat
     ) -> None:
-        async with self._lock:
-            detail = self._store.get(investigation_id)
-            if detail is None:
-                return
-            updates: dict = {"status": status, "updated_at": datetime.now(UTC)}
-            if triage_summary is not None:
-                updates["triage_summary"] = triage_summary
-            if proposed_action is not None:
-                updates["proposed_action"] = proposed_action
-            if hil_token is not None:
-                updates["hil_token"] = hil_token
-            if messages is not None:
-                updates["messages"] = detail.messages + messages
-            self._store[investigation_id] = detail.model_copy(update=updates)
+        values: dict = {"status": status, "updated_at": datetime.now(UTC)}
+        if triage_summary is not None:
+            values["triage_summary"] = triage_summary
+        if proposed_action is not None:
+            values["proposed_action"] = proposed_action
+        if hil_token is not None:
+            values["hil_token"] = hil_token
+
+        async with self._factory() as session:
+            await session.execute(
+                update(Investigation)
+                .where(Investigation.investigation_id == investigation_id)
+                .values(**values)
+            )
+            await session.commit()
+
+        log.info(
+            "store.updated",
+            investigation_id=investigation_id,
+            status=status,
+        )
 
     async def list_all(self, status: str | None = None) -> list[InvestigationSummary]:
-        async with self._lock:
-            items = list(self._store.values())
-        if status:
-            items = [i for i in items if i.status == status]
-        return [InvestigationSummary(**i.model_dump()) for i in items]
+        async with self._factory() as session:
+            stmt = select(Investigation).order_by(Investigation.started_at.desc())
+            if status:
+                stmt = stmt.where(Investigation.status == status)
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+        return [_to_summary(r) for r in rows]
+
+
+def _to_summary(row: Investigation) -> InvestigationSummary:
+    return InvestigationSummary(
+        investigation_id=row.investigation_id,
+        event_id=row.event_id,
+        severity=row.severity,  # type: ignore[arg-type]
+        model_name=row.model_name,
+        model_version=row.model_version,
+        status=row.status,  # type: ignore[arg-type]
+        started_at=row.started_at,
+        updated_at=row.updated_at,
+        triage_summary=row.triage_summary,
+        proposed_action=row.proposed_action,
+    )
+
+
+def _to_detail(row: Investigation) -> InvestigationDetail:
+    return InvestigationDetail(
+        **_to_summary(row).model_dump(),
+        hil_token=row.hil_token,
+    )

@@ -33,7 +33,13 @@ async def _run_investigation(
 ) -> None:
     store = request.app.state.store
     graph = request.app.state.graph
-    config = {"configurable": {"thread_id": investigation_id}}
+    config = {
+        "configurable": {
+            "thread_id": investigation_id,
+            "llm_client": request.app.state.llm,
+            "redis_client": request.app.state.redis,
+        }
+    }
 
     try:
         initial_state = {
@@ -44,8 +50,6 @@ async def _run_investigation(
             "hil_token": None,
             "comms_result": None,
             "investigation_id": investigation_id,
-            "llm_client": request.app.state.llm,
-            "redis_client": request.app.state.redis,
             "messages": [],
         }
         async for chunk in graph.astream(initial_state, config=config):
@@ -84,7 +88,7 @@ async def _run_investigation(
         log.error("investigation.error", investigation_id=investigation_id, error=str(exc))
         await store.update_status(investigation_id, status="escalated")
 
-
+#^
 @router.post("/drift", status_code=202)
 async def receive_drift_webhook(
     request: Request,
@@ -113,3 +117,4 @@ async def receive_drift_webhook(
 
     background_tasks.add_task(_run_investigation, investigation_id, payload, request)
     return {"investigation_id": investigation_id, "status": "accepted"}
+

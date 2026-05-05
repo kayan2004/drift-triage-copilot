@@ -44,7 +44,15 @@ async def approve_investigation(
         )
 
     graph = request.app.state.graph
-    config = {"configurable": {"thread_id": investigation_id}}
+    # Singletons go in configurable — they are never checkpointed, so we must
+    # supply them on every graph.astream / graph.aupdate_state call.
+    config = {
+        "configurable": {
+            "thread_id": investigation_id,
+            "llm_client": request.app.state.llm,
+            "redis_client": request.app.state.redis,
+        }
+    }
 
     if not body.approved:
         await store.update_status(investigation_id, status="rejected")
@@ -57,16 +65,11 @@ async def approve_investigation(
         approver_note=body.approver_note,
     )
 
-    # Resume the graph from the interrupt point with hil_approved=True.
-    # Re-inject non-serializable singletons (lost across checkpoint boundary).
+    # Inject hil_approved=True into the checkpointed state so the supervisor
+    # routes to comms_agent instead of await_hil on resume.
     await graph.aupdate_state(
         config,
-        {
-            "hil_approved": True,
-            "hil_token": detail.hil_token,
-            "llm_client": request.app.state.llm,
-            "redis_client": request.app.state.redis,
-        },
+        {"hil_approved": True, "hil_token": detail.hil_token},
     )
 
     # Continue running the graph

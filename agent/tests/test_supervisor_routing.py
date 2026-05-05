@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langgraph.errors import GraphInterrupt
 
-from app.graph.supervisor import build_graph
+from app.graph.graph import build_graph
 from app.schemas.webhook import DriftWebhookPayload
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -43,13 +43,13 @@ def _make_llm_mock(fixture: dict) -> MagicMock:
     return client
 
 
-def _make_initial_state(fixture: dict, llm_mock: MagicMock) -> dict:
+def _make_state_and_config(fixture: dict, llm_mock: MagicMock) -> tuple[dict, dict]:
     event = DriftWebhookPayload(**fixture["input_event"])
     redis_mock = AsyncMock()
     redis_mock.sadd = AsyncMock(return_value=1)
     redis_mock.expire = AsyncMock(return_value=True)
     redis_mock.lpush = AsyncMock(return_value=1)
-    return {
+    state = {
         "drift_event": event,
         "triage_result": None,
         "action_decision": None,
@@ -57,25 +57,32 @@ def _make_initial_state(fixture: dict, llm_mock: MagicMock) -> dict:
         "hil_token": None,
         "comms_result": None,
         "investigation_id": event.event_id,
-        "llm_client": llm_mock,
-        "redis_client": redis_mock,
         "messages": [],
     }
+    # Singletons go in config["configurable"] — not in state — so they are never
+    # serialized by the checkpointer (even though tests run without one).
+    config = {
+        "configurable": {
+            "llm_client": llm_mock,
+            "redis_client": redis_mock,
+        }
+    }
+    return state, config
 
 
 async def _run_graph_collect(fixture: dict) -> dict:
     """Run graph without checkpointer, collect state updates, return merged state."""
     builder = build_graph()
-    graph = builder.compile()  # no checkpointer — avoids serialization of mock objects
+    graph = builder.compile()  # no checkpointer — routing logic doesn't need persistence
 
     llm_mock = _make_llm_mock(fixture)
-    state = _make_initial_state(fixture, llm_mock)
+    state, config = _make_state_and_config(fixture, llm_mock)
 
     collected: dict = dict(state)
     with patch("app.graph.triage_agent.fetch_drift_report", new_callable=AsyncMock) as mock_fetch:
         mock_fetch.return_value = {"severity": state["drift_event"].severity}
         try:
-            async for chunk in graph.astream(state):
+            async for chunk in graph.astream(state, config=config):
                 for node_output in chunk.values():
                     if isinstance(node_output, dict):
                         collected.update(node_output)
@@ -153,12 +160,12 @@ async def test_supervisor_always_runs_triage_first() -> None:
 
     llm_mock = MagicMock()
     llm_mock.messages.create = recording_create
-    state = _make_initial_state(fixture, llm_mock)
+    state, config = _make_state_and_config(fixture, llm_mock)
 
     with patch("app.graph.triage_agent.fetch_drift_report", new_callable=AsyncMock) as mock_fetch:
         mock_fetch.return_value = {}
         try:
-            async for _ in graph.astream(state):
+            async for _ in graph.astream(state, config=config):
                 pass
         except GraphInterrupt:
             pass

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import anthropic
 import structlog
+from langchain_core.runnables import RunnableConfig
 from pydantic import ValidationError
 
 from app.graph.supervisor import InvestigationState
@@ -26,7 +27,7 @@ TRIAGE_PROMPT = load_prompt("triage")
 SYSTEM_PROMPT, USER_TEMPLATE = _parse_system_and_user(TRIAGE_PROMPT)
 
 
-async def triage_agent_node(state: InvestigationState) -> dict:
+async def triage_agent_node(state: InvestigationState, config: RunnableConfig) -> dict:
     event = state["drift_event"]
     log.info(
         "triage_agent.start",
@@ -56,7 +57,7 @@ async def triage_agent_node(state: InvestigationState) -> dict:
         model_version=event.model_version,
     )
 
-    client: anthropic.AsyncAnthropic = state["llm_client"]
+    client: anthropic.AsyncAnthropic = config["configurable"]["llm_client"]
     try:
         response = await client.messages.create(
             model="claude-sonnet-4-20250514",

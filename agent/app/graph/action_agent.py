@@ -4,6 +4,7 @@ from pathlib import Path
 
 import anthropic
 import structlog
+from langchain_core.runnables import RunnableConfig
 from pydantic import ValidationError
 
 from app.graph.supervisor import InvestigationState
@@ -30,7 +31,7 @@ ACTION_PROMPT = load_prompt("action")
 SYSTEM_PROMPT, USER_TEMPLATE = _parse_system_and_user(ACTION_PROMPT)
 
 
-async def action_agent_node(state: InvestigationState) -> dict:
+async def action_agent_node(state: InvestigationState, config: RunnableConfig) -> dict:
     triage = state["triage_result"]
     hil_approved = state.get("hil_approved", False)
 
@@ -49,7 +50,7 @@ async def action_agent_node(state: InvestigationState) -> dict:
         hil_approved=hil_approved,
     )
 
-    client: anthropic.AsyncAnthropic = state["llm_client"]
+    client: anthropic.AsyncAnthropic = config["configurable"]["llm_client"]
     try:
         response = await client.messages.create(
             model="claude-sonnet-4-20250514",
@@ -82,7 +83,7 @@ async def action_agent_node(state: InvestigationState) -> dict:
                 investigation_id=state["investigation_id"],
                 created_at=datetime.now(tz=UTC),
             )
-            await enqueue_job(state["redis_client"], queue_job)
+            await enqueue_job(config["configurable"]["redis_client"], queue_job)
             log.info(
                 "action_agent.job_enqueued",
                 investigation_id=state["investigation_id"],

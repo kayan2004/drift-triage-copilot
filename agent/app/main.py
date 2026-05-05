@@ -7,8 +7,9 @@ from fastapi import FastAPI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.config import get_settings
-from app.graph.supervisor import build_graph
-from app.routes import investigations, webhooks
+from app.db.session import make_engine, make_session_factory
+from app.graph.graph import build_graph
+from app.routes import investigations, queue, webhooks
 from app.store import InvestigationStore
 
 log = structlog.get_logger()
@@ -24,6 +25,11 @@ async def lifespan(app: FastAPI):
     # Redis client
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
 
+    # SQLAlchemy async engine + session factory for investigations table
+    engine = make_engine(settings.agent_database_url)
+    app.state.session_factory = make_session_factory(engine)
+    app.state.engine = engine
+
     # LangGraph Postgres checkpointer
     # Uses the raw psycopg connection string (strip asyncpg driver prefix)
     pg_conn_str = settings.agent_database_url.replace(
@@ -37,13 +43,14 @@ async def lifespan(app: FastAPI):
     builder = build_graph()
     app.state.graph = builder.compile(checkpointer=checkpointer)
 
-    # In-memory investigation store (tracks status + HIL tokens)
-    app.state.store = InvestigationStore()
+    # DB-backed investigation store — survives restarts
+    app.state.store = InvestigationStore(app.state.session_factory)
 
     log.info("agent.startup.complete", model_service_url=settings.model_service_url)
     yield
 
     await app.state.redis.aclose()
+    await engine.dispose()
     log.info("agent.shutdown.complete")
 
 
@@ -51,6 +58,7 @@ app = FastAPI(title="Drift Triage — Agent", lifespan=lifespan)
 
 app.include_router(webhooks.router)
 app.include_router(investigations.router)
+app.include_router(queue.router)
 
 
 @app.get("/health")

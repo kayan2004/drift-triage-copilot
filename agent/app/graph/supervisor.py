@@ -1,10 +1,8 @@
 from pathlib import Path
 from typing import Annotated, Any
 
-import anthropic
-import redis.asyncio as aioredis
 import structlog
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import END
 from langgraph.types import interrupt
 from typing_extensions import TypedDict
 
@@ -29,8 +27,8 @@ class InvestigationState(TypedDict):
     hil_token: str | None
     comms_result: CommsReport | None
     investigation_id: str
-    llm_client: anthropic.AsyncAnthropic  # injected at graph invocation, never re-created
-    redis_client: aioredis.Redis  # injected at graph invocation, never re-created
+    # llm_client and redis_client are passed via config["configurable"] — never in state
+    # because AsyncPostgresSaver cannot serialize them.
     messages: Annotated[list[Any], lambda a, b: a + b]
 
 
@@ -90,40 +88,3 @@ async def await_hil_node(state: InvestigationState) -> dict:
     interrupt("Awaiting human approval before dispatching action to queue.")
     return {}
 
-
-# ---------------------------------------------------------------------------
-# Graph builder
-# ---------------------------------------------------------------------------
-
-def build_graph() -> StateGraph:
-    from app.graph.action_agent import action_agent_node
-    from app.graph.comms_agent import comms_agent_node
-    from app.graph.triage_agent import triage_agent_node
-
-    builder = StateGraph(InvestigationState)
-
-    builder.add_node("supervisor", supervisor_node)
-    builder.add_node("triage_agent", triage_agent_node)
-    builder.add_node("action_agent", action_agent_node)
-    builder.add_node("await_hil", await_hil_node)
-    builder.add_node("comms_agent", comms_agent_node)
-
-    builder.add_edge(START, "supervisor")
-    builder.add_conditional_edges(
-        "supervisor",
-        route_after_supervisor,
-        {
-            "triage_agent": "triage_agent",
-            "action_agent": "action_agent",
-            "await_hil": "await_hil",
-            "comms_agent": "comms_agent",
-            END: END,
-        },
-    )
-    # Every sub-agent returns to supervisor after completing
-    builder.add_edge("triage_agent", "supervisor")
-    builder.add_edge("action_agent", "supervisor")
-    builder.add_edge("await_hil", "supervisor")
-    builder.add_edge("comms_agent", "supervisor")
-
-    return builder
