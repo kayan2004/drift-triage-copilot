@@ -33,24 +33,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.session_factory = make_session_factory(engine)
     app.state.engine = engine
 
-    # LangGraph Postgres checkpointer
-    # Uses the raw psycopg connection string (strip asyncpg driver prefix)
+    # LangGraph Postgres checkpointer — from_conn_string() is an async context manager
     pg_conn_str = settings.agent_database_url.replace(
         "postgresql+asyncpg://", "postgresql://"
     )
-    checkpointer = AsyncPostgresSaver.from_conn_string(pg_conn_str)
-    await checkpointer.setup()
-    app.state.checkpointer = checkpointer
+    async with AsyncPostgresSaver.from_conn_string(pg_conn_str) as checkpointer:
+        await checkpointer.setup()
+        app.state.checkpointer = checkpointer
 
-    # Build compiled graph with checkpointer
-    builder = build_graph()
-    app.state.graph = builder.compile(checkpointer=checkpointer)
+        # Build compiled graph with checkpointer
+        builder = build_graph()
+        app.state.graph = builder.compile(checkpointer=checkpointer)
 
-    # DB-backed investigation store — survives restarts
-    app.state.store = InvestigationStore(app.state.session_factory)
+        # DB-backed investigation store — survives restarts
+        app.state.store = InvestigationStore(app.state.session_factory)
 
-    log.info("agent.startup.complete", model_service_url=settings.model_service_url)
-    yield
+        log.info("agent.startup.complete", model_service_url=settings.model_service_url)
+        yield
 
     await app.state.redis.aclose()
     await engine.dispose()

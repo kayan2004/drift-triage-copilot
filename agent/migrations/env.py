@@ -23,6 +23,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        version_table="agent_alembic_version",
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -35,6 +36,7 @@ async def run_migrations_online() -> None:
             lambda sync_conn: context.configure(
                 connection=sync_conn,
                 target_metadata=target_metadata,
+                version_table="agent_alembic_version",
             )
         )
         async with conn.begin():
