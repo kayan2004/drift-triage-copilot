@@ -33,10 +33,12 @@ async def _run_investigation(
 ) -> None:
     store = request.app.state.store
     graph = request.app.state.graph
+    settings = get_settings()
     config = {
         "configurable": {
             "thread_id": investigation_id,
             "llm_client": request.app.state.llm,
+            "llm_model": settings.anthropic_model,
             "redis_client": request.app.state.redis,
         }
     }

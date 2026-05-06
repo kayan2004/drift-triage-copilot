@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 
+from app.config import get_settings
+
 from app.queue.producer import enqueue_job
 from app.schemas.hil import (
     HILApprovalRequest,
@@ -49,10 +51,12 @@ async def approve_investigation(
         )
 
     graph = request.app.state.graph
+    settings = get_settings()
     config = {
         "configurable": {
             "thread_id": investigation_id,
             "llm_client": request.app.state.llm,
+            "llm_model": settings.anthropic_model,
             "redis_client": request.app.state.redis,
         }
     }

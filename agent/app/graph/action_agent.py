@@ -51,9 +51,10 @@ async def action_agent_node(state: InvestigationState, config: RunnableConfig) -
     )
 
     client: anthropic.AsyncAnthropic = config["configurable"]["llm_client"]
+    model: str = config["configurable"]["llm_model"]
     try:
         response = await client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=model,
             max_tokens=512,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     app_env: Literal["local", "dev", "prod"] = "local"
     log_level: str = "INFO"
     anthropic_api_key: SecretStr | None = None
+    anthropic_model: str = "claude-sonnet-4-6"
 
     # Service wiring
     agent_database_url: str
