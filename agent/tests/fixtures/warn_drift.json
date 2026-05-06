@@ -1,0 +1,39 @@
+{
+  "input_event": {
+    "event_id": "evt-warn-001",
+    "event_type": "drift_alert",
+    "timestamp": "2025-05-01T11:00:00Z",
+    "severity": "warn",
+    "previous_severity": "ok",
+    "model_name": "bank_churn_classifier",
+    "model_version": "1",
+    "drift_report_id": "rpt-002",
+    "psi_summary": {"euribor3m": 0.15},
+    "chi2_summary": {"job": 0.03},
+    "output_drift": 0.06,
+    "webhook_version": "1.0"
+  },
+  "triage_llm_response": {
+    "drifting_features": ["euribor3m", "job"],
+    "drift_hypothesis": "seasonal",
+    "recommended_actions": ["replay_test"],
+    "urgency": "medium"
+  },
+  "action_llm_response": {
+    "chosen_action": "replay_test",
+    "requires_human_approval": false,
+    "justification": "Warn-level drift; replay test sufficient to assess impact.",
+    "queue_job_id": null
+  },
+  "comms_llm_response": {
+    "summary": "Warn drift on bank_churn_classifier v1. Replay test dispatched automatically.",
+    "actions_taken": ["replay_test"],
+    "next_steps": "Review replay test results; escalate if metrics degrade.",
+    "investigation_status": "resolved"
+  },
+  "expected": {
+    "requires_hil": false,
+    "chosen_action": "replay_test",
+    "triage_urgency": "medium"
+  }
+}
