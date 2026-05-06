@@ -16,4 +16,3 @@ mlartifacts/
 .pytest_cache/
 training/data/
 *.npy
-brief.md

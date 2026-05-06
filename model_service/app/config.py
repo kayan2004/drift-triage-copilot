@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     webhook_secret: str
     log_level: str = "INFO"
     drift_window_size: int = 500
+    agent_url: str = "http://agent:8001"
 
 
 @lru_cache(maxsize=1)

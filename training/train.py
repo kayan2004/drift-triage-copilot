@@ -176,13 +176,19 @@ def build_final_pipeline(best_name: str, best_params: dict[str, Any]) -> Any:
     return make_pipeline(HistGradientBoostingClassifier(**clf_kwargs))
 
 
-def compute_reference_stats(X_train: pd.DataFrame, y_train: pd.Series) -> dict[str, Any]:
+def compute_reference_stats(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    pipeline: Any,
+    threshold: float,
+) -> dict[str, Any]:
+    train_preds = (pipeline.predict_proba(X_train)[:, 1] >= threshold).astype(int)
     stats: dict[str, Any] = {
         "numeric_cols": NUMERIC_COLS,
         "cat_cols": CAT_COLS,
         "numerics": {},
         "categoricals": {},
-        "output": {"positive_rate": float(y_train.mean())},
+        "output": {"positive_rate": float(train_preds.mean())},
     }
     for col in NUMERIC_COLS:
         arr = X_train[col].dropna().to_numpy().astype(float)
@@ -236,7 +242,7 @@ def main() -> None:
     assert test_auc >= MIN_AUC, f"Promotion gate failed: test_auc {test_auc:.4f} < {MIN_AUC}"
     assert test_recall >= MIN_RECALL, f"Promotion gate failed: test_recall {test_recall:.4f} < {MIN_RECALL}"
 
-    ref_stats = compute_reference_stats(X_train, y_train)
+    ref_stats = compute_reference_stats(X_train, y_train, pipeline, operating_threshold)
     ref_stats_path = Path(__file__).parent / "reference_stats.json"
     ref_stats_path.write_text(json.dumps(ref_stats, indent=2))
     log.info("reference_stats.saved", path=str(ref_stats_path))

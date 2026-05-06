@@ -48,6 +48,9 @@ services:
     networks: [triage_net]
     restart: "no"
     profiles: ["train"]
+    volumes:
+      - ./training/train.py:/app/train.py:ro
+      - ./training/reference_stats.json:/app/reference_stats.json
 
   db_migrate:
     build: ./model_service
