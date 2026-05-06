@@ -78,6 +78,50 @@ async def get_version(
     return _build_version_info(mv, card)
 
 
+@router.post("/retrain", status_code=202)
+async def trigger_retrain(
+    settings: Settings = Depends(get_settings),
+) -> dict[str, str]:
+    log.info("retrain.requested", model_name=settings.model_name)
+
+    async def _run() -> None:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "compose", "--profile", "train", "run", "--rm", "model_train",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode == 0:
+            log.info("retrain.completed", model_name=settings.model_name)
+        else:
+            log.error("retrain.failed", returncode=proc.returncode, output=stdout.decode()[-500:])
+
+    asyncio.create_task(_run())
+    return {"status": "accepted", "message": "Retrain started in background"}
+
+
+@router.post("/rollback/{version}", response_model=ModelVersionInfo)
+async def rollback_version(
+    version: str,
+    settings: Settings = Depends(get_settings),
+) -> ModelVersionInfo:
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    client = MlflowClient()
+    try:
+        mv = await asyncio.to_thread(client.get_model_version, settings.model_name, version)
+    except MlflowException:
+        raise HTTPException(status_code=404, detail=f"Version '{version}' not found")
+    await asyncio.to_thread(
+        client.set_registered_model_alias,
+        name=settings.model_name,
+        alias="production",
+        version=version,
+    )
+    card = await _fetch_card(mv.run_id)
+    log.info("model.rolled_back", version=version, alias="production")
+    return _build_version_info(mv, card)
+
+
 @router.post("/promote/{version}", response_model=ModelVersionInfo)
 async def promote_version(
     version: str,
