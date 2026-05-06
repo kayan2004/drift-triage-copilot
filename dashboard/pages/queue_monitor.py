@@ -5,7 +5,7 @@ import time
 import redis
 import streamlit as st
 
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = os.environ.get("QUEUE_REDIS_URL", "redis://localhost:6379/1")
 AGENT_URL = os.environ.get("AGENT_URL", "http://localhost:8001")
 
 _JOBS_KEY = "triage:jobs"
