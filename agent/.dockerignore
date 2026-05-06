@@ -10,5 +10,3 @@ tests/
 .coverage
 .pytest_cache/
 .ruff_cache/
-migrations/
-alembic.ini
