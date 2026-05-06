@@ -83,24 +83,19 @@ else:
         model_ver = inv.get("model_version", "—")
         model_name = inv.get("model_name", "—")
 
-        detail = fetch_detail(inv_id)
-
         with st.container(border=True):
             st.markdown(f"### 🟠 Investigation `{inv_id[:20]}…`")
             st.markdown(f"**Severity:** `{severity}` | **Model:** `{model_name} v{model_ver}`")
 
-            if detail:
-                # Show triage summary from messages
-                messages = detail.get("messages", [])
-                triage_msg = next((m for m in messages if m.get("role") == "triage_agent"), None)
-                action_msg = next((m for m in messages if m.get("role") == "action_agent"), None)
+            proposed_action = inv.get("proposed_action") or "—"
+            triage_summary = inv.get("triage_summary")
 
-                if triage_msg:
-                    with st.expander("Triage Assessment"):
-                        st.text(triage_msg.get("content", "—"))
-                if action_msg:
-                    with st.expander("Proposed Action", expanded=True):
-                        st.text(action_msg.get("content", "—"))
+            with st.expander("Proposed Action", expanded=True):
+                st.markdown(f"`{proposed_action}`")
+
+            if triage_summary:
+                with st.expander("Triage Summary"):
+                    st.text(triage_summary)
 
             note = st.text_input(
                 "Approver note (optional)",

@@ -48,6 +48,16 @@ services:
     networks: [triage_net]
     restart: "no"
 
+  agent_migrate:
+    build: ./agent
+    command: uv run alembic upgrade head
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [triage_net]
+    restart: "no"
+
   model_service:
     build: ./model_service
     env_file: .env
@@ -78,6 +88,8 @@ services:
         condition: service_healthy
       model_service:
         condition: service_healthy
+      agent_migrate:
+        condition: service_completed_successfully
     networks: [triage_net]
     ports: ["8001:8001"]
     healthcheck:

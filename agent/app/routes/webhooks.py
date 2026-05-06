@@ -65,6 +65,12 @@ async def _run_investigation(
         state_vals = final.values if final else {}
         action = state_vals.get("action_decision")
 
+        triage = state_vals.get("triage_result")
+        triage_summary = (
+            f"{triage.urgency} urgency — {triage.drift_hypothesis} — features: {', '.join(triage.drifting_features)}"
+            if triage else None
+        )
+
         if action and action.requires_human_approval and not state_vals.get("hil_approved"):
             # Graph interrupted — waiting for HIL
             token = str(uuid.uuid4())
@@ -73,12 +79,17 @@ async def _run_investigation(
                 status="awaiting_approval",
                 proposed_action=action.chosen_action,
                 hil_token=token,
+                triage_summary=triage_summary,
             )
             log.info("investigation.awaiting_hil", investigation_id=investigation_id)
         else:
             comms = state_vals.get("comms_result")
             final_status = comms.investigation_status if comms else "resolved"
-            await store.update_status(investigation_id, status=final_status)
+            await store.update_status(
+                investigation_id,
+                status=final_status,
+                triage_summary=triage_summary,
+            )
             log.info(
                 "investigation.complete",
                 investigation_id=investigation_id,
