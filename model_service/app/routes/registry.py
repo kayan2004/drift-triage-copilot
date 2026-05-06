@@ -83,7 +83,21 @@ async def trigger_retrain(
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
     log.info("retrain.requested", model_name=settings.model_name)
-    return {"status": "accepted", "message": "Retrain job queued — run model_train service to execute"}
+
+    async def _run() -> None:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "compose", "--profile", "train", "run", "--rm", "model_train",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode == 0:
+            log.info("retrain.completed", model_name=settings.model_name)
+        else:
+            log.error("retrain.failed", returncode=proc.returncode, output=stdout.decode()[-500:])
+
+    asyncio.create_task(_run())
+    return {"status": "accepted", "message": "Retrain started in background"}
 
 
 @router.post("/rollback/{version}", response_model=ModelVersionInfo)
