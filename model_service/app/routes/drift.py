@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from typing import Any
 
@@ -37,6 +38,18 @@ async def _get_latest_report(session: AsyncSession) -> DriftReport | None:
         select(DriftReport).order_by(DriftReport.created_at.desc()).limit(1)
     )
     return result.scalar_one_or_none()
+
+
+@router.get("/report/{report_id}", response_model=DriftReportResponse)
+async def get_drift_report_by_id(
+    report_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db_session),
+) -> DriftReportResponse:
+    result = await session.execute(select(DriftReport).where(DriftReport.id == report_id))
+    report = result.scalar_one_or_none()
+    if report is None:
+        raise HTTPException(status_code=404, detail=f"Drift report '{report_id}' not found")
+    return _to_response(report)
 
 
 @router.get("/report", response_model=DriftReportResponse)
