@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     # Service wiring
     agent_database_url: str
     model_service_url: str
-    redis_url: str
     webhook_secret: str
     drift_webhook_path: str = "/webhooks/drift"
 

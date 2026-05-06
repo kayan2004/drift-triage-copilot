@@ -25,8 +25,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         api_key=settings.anthropic_api_key.get_secret_value()
     )
 
-    # Redis client
-    app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    # Redis client — must use queue_redis_url (same DB as worker) so enqueued jobs reach the worker
+    app.state.redis = aioredis.from_url(settings.queue_redis_url, decode_responses=True)
 
     # SQLAlchemy async engine + session factory for investigations table
     engine = make_engine(settings.agent_database_url)
