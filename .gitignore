@@ -8,6 +8,8 @@ __pycache__/
 *.egg-info/
 .DS_Store
 mlruns/
+mlartifacts/
+*.db
 *.pem
 *.key
 .coverage
@@ -16,3 +18,4 @@ training/data/
 *.npy
 project.txt
 DRIFT_TRIAGE_PLAN.md
+brief.md
