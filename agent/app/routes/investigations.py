@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import UTC, datetime
 
@@ -31,6 +32,29 @@ async def get_investigation(investigation_id: str, request: Request) -> Investig
     detail = await request.app.state.store.get(investigation_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Investigation not found")
+
+    graph = request.app.state.graph
+    settings = get_settings()
+    config = {
+        "configurable": {
+            "thread_id": investigation_id,
+            "llm_client": request.app.state.llm,
+            "llm_model": settings.anthropic_model,
+            "redis_client": request.app.state.redis,
+        }
+    }
+    try:
+        state = await graph.aget_state(config)
+        messages = (state.values or {}).get("messages", []) if state else []
+        if messages:
+            detail = detail.model_copy(update={"messages": messages})
+    except Exception as exc:  # checkpoint read failures are non-fatal
+        log.warning(
+            "investigation.checkpoint_read_failed",
+            investigation_id=investigation_id,
+            error=str(exc),
+        )
+
     return detail
 
 
@@ -120,6 +144,20 @@ async def approve_investigation(
     final_vals = final.values if final else {}
     comms = final_vals.get("comms_result")
     final_status = comms.investigation_status if comms else "resolved"
+
+    # Safety net: if the operator approved AND we dispatched a queue job, the
+    # investigation is genuinely resolved — override any pessimistic comms output.
+    # The job is in flight; the worker owns execution from here.
+    if queue_job_id and final_status != "resolved":
+        log.info(
+            "investigation.status_override",
+            investigation_id=investigation_id,
+            comms_status=final_status,
+            override_to="resolved",
+            reason="queue_job_dispatched_after_hil_approval",
+        )
+        final_status = "resolved"
+
     await store.update_status(investigation_id, status=final_status)
 
     return {

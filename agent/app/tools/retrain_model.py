@@ -36,16 +36,18 @@ async def retrain_handler(job: QueueJob) -> dict | ToolError:
                     **job.payload,
                 },
             )
-            if response.status_code == 200:
+            # 200 = sync completion with new version; 202 = accepted, training in background
+            if response.status_code in (200, 202):
                 result = response.json()
                 log.info(
-                    "retrain.complete",
+                    "retrain.dispatched",
                     job_id=job.job_id,
+                    status_code=response.status_code,
                     new_version=result.get("model_version"),
                 )
                 return result
             log.warning(
-                "retrain.non_200",
+                "retrain.non_2xx",
                 job_id=job.job_id,
                 status=response.status_code,
             )

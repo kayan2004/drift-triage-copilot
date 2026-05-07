@@ -5,6 +5,7 @@ import structlog
 from langchain_core.runnables import RunnableConfig
 from pydantic import ValidationError
 
+from app.graph._json import parse_json_payload
 from app.graph.supervisor import InvestigationState
 from app.schemas.tool_io import ToolError, TriageAssessment
 from app.tools.fetch_drift_report import fetch_drift_report
@@ -62,12 +63,12 @@ async def triage_agent_node(state: InvestigationState, config: RunnableConfig) -
     try:
         response = await client.messages.create(
             model=model,
-            max_tokens=1024,
+            max_tokens=2048,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )
         raw = response.content[0].text
-        assessment = TriageAssessment.model_validate_json(raw)
+        assessment = parse_json_payload(raw, TriageAssessment)
         log.info(
             "triage_agent.complete",
             investigation_id=state["investigation_id"],

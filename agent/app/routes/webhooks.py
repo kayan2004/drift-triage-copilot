@@ -91,6 +91,7 @@ async def _run_investigation(
                 investigation_id,
                 status=final_status,
                 triage_summary=triage_summary,
+                proposed_action=action.chosen_action if action else None,
             )
             log.info(
                 "investigation.complete",

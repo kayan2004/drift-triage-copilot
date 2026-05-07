@@ -10,7 +10,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from app.config import get_settings
 from app.db.session import make_engine, make_session_factory
 from app.graph.graph import build_graph
-from app.routes import investigations, queue, webhooks
+from app.routes import demo, investigations, queue, webhooks
 from app.store import InvestigationStore
 
 log = structlog.get_logger()
@@ -61,6 +61,7 @@ app = FastAPI(title="Drift Triage — Agent", lifespan=lifespan)
 app.include_router(webhooks.router)
 app.include_router(investigations.router)
 app.include_router(queue.router)
+app.include_router(demo.router)
 
 
 @app.get("/health")

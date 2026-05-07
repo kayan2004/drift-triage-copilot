@@ -7,6 +7,7 @@ import structlog
 from langchain_core.runnables import RunnableConfig
 from pydantic import ValidationError
 
+from app.graph._json import parse_json_payload
 from app.graph.supervisor import InvestigationState
 from app.queue.producer import enqueue_job
 from app.schemas.tool_io import ActionDecision, QueueJob
@@ -60,7 +61,7 @@ async def action_agent_node(state: InvestigationState, config: RunnableConfig) -
             messages=[{"role": "user", "content": user_prompt}],
         )
         raw = response.content[0].text
-        decision = ActionDecision.model_validate_json(raw)
+        decision = parse_json_payload(raw, ActionDecision)
     except (anthropic.APIError, anthropic.APIConnectionError, ValidationError) as exc:
         log.error("action_agent.llm_error", error=str(exc))
         decision = _fallback_decision(triage, hil_approved)

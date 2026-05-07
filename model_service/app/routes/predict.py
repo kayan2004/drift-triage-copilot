@@ -4,6 +4,7 @@ import uuid
 import pandas as pd
 import structlog
 from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Prediction
@@ -13,6 +14,14 @@ from app.services.model_loader import ModelBundle
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/predict", tags=["predictions"])
+
+
+@router.get("/count")
+async def prediction_count(
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, int]:
+    result = await session.execute(select(func.count()).select_from(Prediction))
+    return {"count": result.scalar_one()}
 
 
 @router.post("/", response_model=PredictionResponse)

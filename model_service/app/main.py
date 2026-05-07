@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 from app.config import get_settings
 from app.db.session import make_engine, make_session_factory
-from app.routes import drift, predict, registry
+from app.routes import demo, drift, predict, registry
 from app.services.model_loader import load_model_bundle
 
 structlog.configure(
@@ -46,6 +46,7 @@ app = FastAPI(title="Drift Triage — Model Service", lifespan=lifespan)
 app.include_router(predict.router)
 app.include_router(registry.router)
 app.include_router(drift.router)
+app.include_router(demo.router)
 
 
 @app.get("/health")
