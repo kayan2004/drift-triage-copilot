@@ -9,12 +9,12 @@ import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException
 from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
 from app.dependencies import get_db_session
 from app.schemas.registry import ModelVersionInfo, PromotionRequest
 from app.services.promotion_gate import check_all
-from sqlalchemy.ext.asyncio import AsyncSession
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/registry", tags=["registry"])
@@ -91,7 +91,13 @@ async def trigger_retrain(
 
     async def _run() -> None:
         proc = await asyncio.create_subprocess_exec(
-            "docker", "compose", "--profile", "train", "run", "--rm", "model_train",
+            "docker",
+            "compose",
+            "--profile",
+            "train",
+            "run",
+            "--rm",
+            "model_train",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )

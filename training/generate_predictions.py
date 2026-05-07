@@ -1,11 +1,16 @@
 """
 Generates prediction batches to test drift detection at three severity levels.
-Samples ok batch from actual training distributions in reference_stats.json.
+Sends WINDOW_SIZE+10 predictions so the rolling window is fully dominated
+by the chosen distribution, then triggers a drift compute.
 
 Usage:
-    uv run python generate_predictions.py
+    python generate_predictions.py --scenario ok
+    python generate_predictions.py --scenario warn
+    python generate_predictions.py --scenario critical
+    python generate_predictions.py          # runs all three in sequence
 """
 
+import argparse
 import asyncio
 import json
 import random
@@ -21,10 +26,7 @@ REF = json.loads((Path(__file__).parent / "reference_stats.json").read_text())
 
 
 def sample_bin(bin_edges: list, reference_pct: list) -> float:
-    """Sample a value from a binned reference distribution.
-    Only samples from bins with non-zero reference probability to avoid
-    inflating PSI with values the reference considers impossible.
-    """
+    """Sample from the training distribution (only non-zero bins)."""
     valid = [(i, p) for i, p in enumerate(reference_pct) if p > 0]
     indices, weights = zip(*valid)
     idx = random.choices(indices, weights=weights)[0]
@@ -32,10 +34,7 @@ def sample_bin(bin_edges: list, reference_pct: list) -> float:
 
 
 def sample_bin_warn(bin_edges: list, reference_pct: list) -> float:
-    """Sample from a flattened reference distribution — gives PSI ~0.1–0.2.
-    Uses power 0.65 on weights so low-frequency bins get more mass and
-    high-frequency bins less, without ever landing in zero-probability bins.
-    """
+    """Sample from a flattened distribution — gives PSI ~0.1–0.2."""
     shifted = [p ** 0.65 for p in reference_pct]
     valid = [(i, w) for i, w in enumerate(shifted) if reference_pct[i] > 0]
     indices, weights = zip(*valid)
@@ -44,14 +43,12 @@ def sample_bin_warn(bin_edges: list, reference_pct: list) -> float:
 
 
 def sample_cat(proportions: dict) -> str:
-    """Sample a category using training proportions as weights."""
     cats = list(proportions.keys())
     weights = list(proportions.values())
     return random.choices(cats, weights=weights)[0]
 
 
 def ok_features() -> dict:
-    """Sample from the actual training distribution — expect ok severity."""
     num = REF["numerics"]
     cat = REF["categoricals"]
     return {
@@ -78,34 +75,31 @@ def ok_features() -> dict:
 
 
 def warn_features() -> dict:
-    """Shift only cons_conf_idx — gives PSI ~0.13 (warn) without moving output_drift."""
     f = ok_features()
     num = REF["numerics"]
-    f["cons_conf_idx"] = sample_bin_warn(
-        num["cons_conf_idx"]["bin_edges"], num["cons_conf_idx"]["reference_pct"]
-    )
-    f["nr_employed"] = sample_bin_warn(
-        num["nr_employed"]["bin_edges"], num["nr_employed"]["reference_pct"]
-    )
+    f["cons_conf_idx"] = sample_bin_warn(num["cons_conf_idx"]["bin_edges"], num["cons_conf_idx"]["reference_pct"])
+    f["nr_employed"] = sample_bin_warn(num["nr_employed"]["bin_edges"], num["nr_employed"]["reference_pct"])
     return f
 
 
 def critical_features() -> dict:
-    """Heavily shifted outside training range — expect critical severity."""
     f = ok_features()
-    f["euribor3m"]       = round(random.uniform(5.5, 8.0), 4)
-    f["emp_var_rate"]    = round(random.uniform(2.0, 4.5), 4)
-    f["cons_price_idx"]  = round(random.uniform(95.5, 97.5), 4)
-    f["cons_conf_idx"]   = round(random.uniform(-15.0, -5.0), 4)
-    f["nr_employed"]     = round(random.uniform(5300.0, 5500.0), 1)
-    f["month"]           = random.choices(
-        ["oct", "nov", "dec"], weights=[30, 40, 30]
-    )[0]
-    f["poutcome"]        = random.choices(
-        ["nonexistent", "failure", "success"], weights=[10, 85, 5]
-    )[0]
-    f["contact"]         = "telephone"
+    f["euribor3m"]      = round(random.uniform(5.5, 8.0), 4)
+    f["emp_var_rate"]   = round(random.uniform(2.0, 4.5), 4)
+    f["cons_price_idx"] = round(random.uniform(95.5, 97.5), 4)
+    f["cons_conf_idx"]  = round(random.uniform(-15.0, -5.0), 4)
+    f["nr_employed"]    = round(random.uniform(5300.0, 5500.0), 1)
+    f["month"]          = random.choices(["oct", "nov", "dec"], weights=[30, 40, 30])[0]
+    f["poutcome"]       = random.choices(["nonexistent", "failure", "success"], weights=[10, 85, 5])[0]
+    f["contact"]        = "telephone"
     return f
+
+
+SCENARIOS = {
+    "ok":       (ok_features,       "ok"),
+    "warn":     (warn_features,     "warn"),
+    "critical": (critical_features, "critical"),
+}
 
 
 async def send_one(client: httpx.AsyncClient, features: dict) -> bool:
@@ -116,45 +110,51 @@ async def send_one(client: httpx.AsyncClient, features: dict) -> bool:
         return False
 
 
-async def send_batch(label: str, feature_fn, n: int) -> None:
-    print(f"\n[{label}] Sending {n} predictions...")
+async def run_scenario(label: str, feature_fn, expected: str) -> None:
+    print(f"\n[{label.upper()}] Sending {BATCH_SIZE} predictions...")
     async with httpx.AsyncClient() as client:
-        results = await asyncio.gather(*[send_one(client, feature_fn()) for _ in range(n)])
-    print(f"  {sum(results)}/{n} succeeded")
+        results = await asyncio.gather(*[send_one(client, feature_fn()) for _ in range(BATCH_SIZE)])
+    print(f"  {sum(results)}/{BATCH_SIZE} succeeded")
 
-
-async def compute_and_print() -> str:
+    print("  Computing drift...")
     async with httpx.AsyncClient() as client:
         resp = await client.post(f"{MODEL_SERVICE_URL}/drift/compute", timeout=30.0)
+
     if resp.status_code != 200:
         print(f"  ERROR {resp.status_code}: {resp.text}")
-        return "error"
+        return
+
     r = resp.json()
-    top_psi = sorted(r["psi_scores"].items(), key=lambda x: x[1], reverse=True)[:3]
+    top_psi  = sorted(r["psi_scores"].items(),  key=lambda x: x[1], reverse=True)[:3]
     low_chi2 = sorted(r["chi2_scores"].items(), key=lambda x: x[1])[:3]
-    print(f"  severity:     {r['severity']}")
+    match = "✓" if r["severity"] == expected else "✗"
+    print(f"  severity:     {r['severity']}  (expected: {expected}) {match}")
     print(f"  output_drift: {r['output_drift']:.4f}")
     print(f"  top PSI:      {top_psi}")
     print(f"  low chi2 p:   {low_chi2}")
-    return r["severity"]
 
 
-async def main() -> None:
+async def main(scenario: str | None) -> None:
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"{MODEL_SERVICE_URL}/health")
         resp.raise_for_status()
         print(f"model_service healthy — model v{resp.json()['model_version']}")
 
-    for label, feature_fn, expected in [
-        ("OK",       ok_features,       "ok"),
-        ("WARN",     warn_features,     "warn"),
-        ("CRITICAL", critical_features, "critical"),
-    ]:
-        await send_batch(label, feature_fn, BATCH_SIZE)
-        severity = await compute_and_print()
-        match = "✓" if severity == expected else "✗"
-        print(f"  expected: {expected} | got: {severity} {match}")
+    if scenario:
+        feature_fn, expected = SCENARIOS[scenario]
+        await run_scenario(scenario, feature_fn, expected)
+    else:
+        for label, (feature_fn, expected) in SCENARIOS.items():
+            await run_scenario(label, feature_fn, expected)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--scenario",
+        choices=["ok", "warn", "critical"],
+        default=None,
+        help="Severity scenario to generate. Omit to run all three in sequence.",
+    )
+    args = parser.parse_args()
+    asyncio.run(main(args.scenario))

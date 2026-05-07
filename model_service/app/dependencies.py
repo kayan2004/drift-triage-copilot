@@ -3,7 +3,8 @@ from collections.abc import AsyncGenerator
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import Settings, get_settings as _get_settings
+from app.config import Settings
+from app.config import get_settings as _get_settings
 from app.services.model_loader import ModelBundle
 
 

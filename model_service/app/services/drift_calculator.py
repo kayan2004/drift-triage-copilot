@@ -25,10 +25,12 @@ def compute_psi(reference_pct: list[float], bin_edges: list[float], current: np.
     total = counts.sum()
     current_pct = counts / max(total, 1)
     eps = 1e-6
-    return float(sum(
-        (c - r) * np.log((c + eps) / (r + eps))
-        for c, r in zip(current_pct, reference_pct, strict=False)
-    ))
+    return float(
+        sum(
+            (c - r) * np.log((c + eps) / (r + eps))
+            for c, r in zip(current_pct, reference_pct, strict=False)
+        )
+    )
 
 
 def classify_psi(psi: float) -> SeverityEnum:

@@ -9,11 +9,12 @@ Rules:
 - If hil_approved=true and chosen_action requires approval, proceed to dispatch.
 
 Decision rules (apply in order, stop at first match):
-1. urgency=critical → choose retrain (requires_human_approval=true). A critical drift means the model distribution has shifted severely; a replay test is insufficient.
-2. urgency=high AND recommended_actions contains retrain → choose retrain.
-3. urgency=high AND recommended_actions does NOT contain retrain → choose replay_test.
-4. urgency=medium → choose replay_test.
-5. urgency=low → choose monitor_only.
+1. urgency=critical AND recommended_actions contains rollback → choose rollback (requires_human_approval=true). Severe drift on a static dataset means the current model is unreliable; roll back to the last known-good version.
+2. urgency=critical AND recommended_actions does NOT contain rollback → choose retrain (requires_human_approval=true).
+3. urgency=high AND recommended_actions contains retrain → choose retrain.
+4. urgency=high AND recommended_actions does NOT contain retrain → choose replay_test.
+5. urgency=medium → choose replay_test.
+6. urgency=low → choose monitor_only.
 
 Output format: a JSON object matching the ActionDecision schema. Output JSON only — no prose, no commentary, no markdown code fences. The first character of your response must be `{` and the last must be `}`. Keep `justification` to a single concise sentence.
 
