@@ -6,7 +6,6 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request
 
 from app.config import get_settings
-
 from app.queue.producer import enqueue_job
 from app.schemas.hil import (
     HILApprovalRequest,

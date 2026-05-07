@@ -2,8 +2,8 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Enum as SAEnum, Float, Integer, String
-from sqlalchemy import text
+from sqlalchemy import JSON, Float, Integer, String, text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -11,7 +11,7 @@ class Base(DeclarativeBase):
     pass
 
 
-class SeverityEnum(str, enum.Enum):
+class SeverityEnum(enum.StrEnum):
     ok = "ok"
     warn = "warn"
     critical = "critical"

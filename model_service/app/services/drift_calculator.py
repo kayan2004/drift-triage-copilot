@@ -27,7 +27,7 @@ def compute_psi(reference_pct: list[float], bin_edges: list[float], current: np.
     eps = 1e-6
     return float(sum(
         (c - r) * np.log((c + eps) / (r + eps))
-        for c, r in zip(current_pct, reference_pct)
+        for c, r in zip(current_pct, reference_pct, strict=False)
     ))
 
 

@@ -36,7 +36,12 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC", "S"]
-ignore = ["S101"]
+ignore = [
+    "S101",   # assert statements in tests
+    "S311",   # random module — used for data sampling, not crypto
+    "B008",   # Depends() in defaults — correct FastAPI DI pattern
+    "ASYNC240", # pathlib in async — acceptable for one-shot file reads
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -1,6 +1,4 @@
 import uuid
-from datetime import datetime
-from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,10 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db.models import DriftReport
 from app.dependencies import get_db_session, get_model
+from app.routes.webhook import emit_drift_webhook
 from app.schemas.drift_report import DriftReportResponse, DriftWebhookPayload
 from app.services.drift_calculator import compute_drift_report
 from app.services.model_loader import ModelBundle
-from app.routes.webhook import emit_drift_webhook
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/drift", tags=["drift"])
@@ -58,7 +56,10 @@ async def get_latest_drift_report(
 ) -> DriftReportResponse:
     report = await _get_latest_report(session)
     if report is None:
-        raise HTTPException(status_code=404, detail="No drift report found — run POST /drift/compute first")
+        raise HTTPException(
+            status_code=404,
+            detail="No drift report found — run POST /drift/compute first",
+        )
     return _to_response(report)
 
 
