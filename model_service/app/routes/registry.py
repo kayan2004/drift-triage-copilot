@@ -59,7 +59,12 @@ async def list_versions(
             card = await _fetch_card(mv.run_id)
             results.append(_build_version_info(mv, card))
         except Exception as exc:
-            log.warning("registry.card_fetch_failed", version=mv.version, run_id=mv.run_id, error=str(exc))
+            log.warning(
+                "registry.card_fetch_failed",
+                version=mv.version,
+                run_id=mv.run_id,
+                error=str(exc),
+            )
     return results
 
 
@@ -72,8 +77,8 @@ async def get_version(
     client = MlflowClient()
     try:
         mv = await asyncio.to_thread(client.get_model_version, settings.model_name, version)
-    except MlflowException:
-        raise HTTPException(status_code=404, detail=f"Version '{version}' not found")
+    except MlflowException as exc:
+        raise HTTPException(status_code=404, detail=f"Version '{version}' not found") from exc
     card = await _fetch_card(mv.run_id)
     return _build_version_info(mv, card)
 
@@ -109,8 +114,8 @@ async def rollback_version(
     client = MlflowClient()
     try:
         mv = await asyncio.to_thread(client.get_model_version, settings.model_name, version)
-    except MlflowException:
-        raise HTTPException(status_code=404, detail=f"Version '{version}' not found")
+    except MlflowException as exc:
+        raise HTTPException(status_code=404, detail=f"Version '{version}' not found") from exc
     await asyncio.to_thread(
         client.set_registered_model_alias,
         name=settings.model_name,
