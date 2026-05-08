@@ -3,7 +3,7 @@
 **AIE Bootcamp — Week 5 Project**
 
 ## Team
-- Partner 1: [Name] — model_service (FastAPI, MLflow, drift engine, promotion gate)
+- Partner 1: Kayan — model_service (FastAPI, MLflow, drift engine, promotion gate)
 - Partner 2: Ali Hamad — agent (LangGraph, Redis queue, HIL flow, dashboard)
 
 ---
@@ -46,10 +46,11 @@ See [ARCH.md](ARCH.md) for the full data flow, service map, and network topology
 
 - Dataset: UCI Bank Marketing (`bank-additional-full.csv`, ~41k rows)
 - Registered name: `bank_churn_classifier`
-- Algorithm: GradientBoostingClassifier
-- Test AUC: [fill after training]
-- Test F1: [fill after training]
-- Operating threshold: [fill after training] — rule: highest threshold where recall ≥ 0.75
+- Algorithm: HistGradientBoostingClassifier
+- Test AUC: 0.8143
+- Test F1: 0.3819
+- Test Recall: 0.7629
+- Operating threshold: 0.37 — rule: highest threshold where recall ≥ 0.75
 
 ---
 
