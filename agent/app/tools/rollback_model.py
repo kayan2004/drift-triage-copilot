@@ -8,6 +8,33 @@ from app.schemas.tool_io import QueueJob, ToolError
 log = structlog.get_logger()
 
 
+async def _find_rollback_target(base_url: str, current_version: str) -> str | None:
+    """Query /registry/versions and return the best version to roll back to.
+
+    Prefers the version with the 'staging' alias. Falls back to the highest
+    version number that is not the current production version.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{base_url}/registry/versions")
+            if response.status_code != 200:
+                return None
+            versions: list[dict] = response.json()
+    except (httpx.TimeoutException, httpx.NetworkError):
+        return None
+
+    # Prefer the staging alias
+    for v in versions:
+        if "staging" in v.get("aliases", []) and v["version"] != current_version:
+            return v["version"]
+
+    # Fall back to highest version that isn't current production
+    others = [v for v in versions if v["version"] != current_version]
+    if not others:
+        return None
+    return max(others, key=lambda v: int(v["version"]))["version"]
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=8),
@@ -15,40 +42,42 @@ log = structlog.get_logger()
     reraise=False,
 )
 async def rollback_handler(job: QueueJob) -> dict | ToolError:
-    """Set the 'staging' alias to a previous model version.
-
-    Does NOT touch the 'production' alias — that requires the promotion gate.
-    """
+    """Set the 'production' alias to a previous model version and hot-reload the model."""
     settings = get_settings()
-    target_version = job.payload.get("target_version", "")
-    if not target_version:
-        return ToolError(error="payload.target_version is required for rollback", retryable=False)
+    base_url = settings.model_service_url
 
-    url = f"{settings.model_service_url}/registry/rollback/{target_version}"
+    target_version = job.payload.get("target_version", "")
+
+    if not target_version:
+        current_version = job.model_version
+        target_version = await _find_rollback_target(base_url, current_version) or ""
+
+    if not target_version:
+        return ToolError(
+            error="No previous version found to roll back to — only one version exists in the registry",
+            retryable=False,
+        )
+
+    url = f"{base_url}/registry/rollback/{target_version}"
 
     log.info(
         "rollback.start",
         job_id=job.job_id,
         model_name=job.model_name,
+        current_version=job.model_version,
         target_version=target_version,
         investigation_id=job.investigation_id,
     )
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                url,
-                json={
-                    "model_name": job.model_name,
-                    "investigation_id": job.investigation_id,
-                },
-            )
+            response = await client.post(url)
             if response.status_code == 200:
                 result = response.json()
                 log.info(
                     "rollback.complete",
                     job_id=job.job_id,
-                    target_version=target_version,
+                    rolled_back_to=target_version,
                 )
                 return result
             log.warning(

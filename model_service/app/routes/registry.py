@@ -6,7 +6,7 @@ from typing import Any
 
 import mlflow
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.dependencies import get_db_session
 from app.schemas.registry import ModelVersionInfo, PromotionRequest
+from app.services.model_loader import load_model_bundle
 from app.services.promotion_gate import check_all
 
 log = structlog.get_logger()
@@ -85,9 +86,11 @@ async def get_version(
 
 @router.post("/retrain", status_code=202)
 async def trigger_retrain(
+    request: Request,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
     log.info("retrain.requested", model_name=settings.model_name)
+    app = request.app
 
     async def _run() -> None:
         proc = await asyncio.create_subprocess_exec(
@@ -104,6 +107,16 @@ async def trigger_retrain(
         stdout, _ = await proc.communicate()
         if proc.returncode == 0:
             log.info("retrain.completed", model_name=settings.model_name)
+            try:
+                new_bundle = await load_model_bundle(settings)
+                app.state.model_bundle = new_bundle
+                log.info(
+                    "retrain.model_reloaded",
+                    new_version=new_bundle.model_version,
+                    threshold=new_bundle.threshold,
+                )
+            except Exception as exc:
+                log.error("retrain.reload_failed", error=str(exc))
         else:
             log.error("retrain.failed", returncode=proc.returncode, output=stdout.decode()[-500:])
 
@@ -114,6 +127,7 @@ async def trigger_retrain(
 @router.post("/rollback/{version}", response_model=ModelVersionInfo)
 async def rollback_version(
     version: str,
+    request: Request,
     settings: Settings = Depends(get_settings),
 ) -> ModelVersionInfo:
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
@@ -130,6 +144,12 @@ async def rollback_version(
     )
     card = await _fetch_card(mv.run_id)
     log.info("model.rolled_back", version=version, alias="production")
+    try:
+        new_bundle = await load_model_bundle(settings)
+        request.app.state.model_bundle = new_bundle
+        log.info("rollback.model_reloaded", version=new_bundle.model_version)
+    except Exception as exc:
+        log.error("rollback.reload_failed", error=str(exc))
     return _build_version_info(mv, card)
 
 
