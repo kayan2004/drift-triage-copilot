@@ -227,14 +227,36 @@ hr {{ border-color: var(--border) !important; opacity: 0.6; }}
 .msg.human {{ border-left-color: var(--human); }}
 .msg.ai    {{ border-left-color: var(--ai); }}
 .msg.tool  {{ border-left-color: var(--tool); }}
+.msg.triage-agent {{ border-left-color: var(--brand); }}
+.msg.action-agent {{ border-left-color: var(--warn); }}
+.msg.comms-agent  {{ border-left-color: var(--ok); }}
 .msg .role {{
   display: inline-block;
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
-  text-transform: uppercase; margin-bottom: 4px; color: var(--muted);
+  text-transform: uppercase; margin-bottom: 8px; color: var(--muted);
 }}
 .msg.human .role {{ color: var(--human); }}
 .msg.ai    .role {{ color: var(--ai); }}
 .msg.tool  .role {{ color: var(--tool); }}
+.msg.triage-agent .role {{ color: var(--brand-hi); }}
+.msg.action-agent .role {{ color: var(--warn); }}
+.msg.comms-agent  .role {{ color: var(--ok); }}
+.msg-field {{ display: flex; gap: 12px; margin: 5px 0; align-items: flex-start; }}
+.msg-key {{
+  font-size: 11px; font-weight: 600; color: var(--subtle);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  min-width: 110px; padding-top: 3px; flex-shrink: 0;
+}}
+.msg-val {{ font-size: 13px; color: var(--text); flex: 1; line-height: 1.55; }}
+.msg-tag {{
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 11.5px; font-weight: 600; margin: 2px 3px 2px 0;
+  background: var(--surface-hi); color: var(--muted);
+  border: 1px solid var(--border-hi);
+}}
+.msg-list {{ list-style: none; padding: 0; margin: 2px 0; }}
+.msg-list li {{ padding: 3px 0; color: var(--muted); font-size: 13px; }}
+.msg-list li::before {{ content: "· "; color: var(--subtle); }}
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 .stButton > button {{
@@ -345,11 +367,134 @@ def event(title: str, body: str, tone: str = "brand", time_str: str = "") -> Non
     )
 
 
-def message_bubble(role: str, content: str) -> None:
-    role_class = role if role in ("human", "ai", "tool") else "ai"
-    safe = content.replace("<", "&lt;").replace(">", "&gt;")
+def _flatten_content(content: str | list) -> str:
+    """Extract plain text from Anthropic content blocks."""
+    if isinstance(content, str):
+        return content
+    import json as _json
+    parts = []
+    for block in content:
+        if not isinstance(block, dict):
+            parts.append(str(block))
+            continue
+        btype = block.get("type", "")
+        if btype == "text":
+            parts.append(block.get("text", ""))
+        elif btype == "tool_use":
+            inp = block.get("input", {})
+            parts.append(f"[Tool: {block.get('name', '?')}]\n{_json.dumps(inp, indent=2)}")
+        elif btype == "tool_result":
+            parts.append(_flatten_content(block.get("content", "")))
+    return "\n".join(p for p in parts if p)
+
+
+# ── Structured agent message renderers ───────────────────────────────────────
+
+_URGENCY_TONE  = {"critical": "crit", "high": "crit", "medium": "warn", "warn": "warn", "low": "ok", "ok": "ok"}
+_STATUS_TONE   = {"escalated": "crit", "rejected": "crit", "resolved": "ok", "open": "warn", "awaiting_approval": "warn"}
+
+
+def _field(key: str, val_html: str) -> str:
+    return (f'<div class="msg-field">'
+            f'<span class="msg-key">{key}</span>'
+            f'<div class="msg-val">{val_html}</div>'
+            f'</div>')
+
+
+def _tag(text: str) -> str:
+    return f'<span class="msg-tag">{text}</span>'
+
+
+def _pill(text: str, tone: str) -> str:
+    return f'<span class="pill {tone}"><span class="dot"></span>{text}</span>'
+
+
+def _render_triage(data: dict) -> str:
+    urgency   = data.get("urgency", "")
+    features  = data.get("drifting_features", [])
+    actions   = data.get("recommended_actions", [])
+    hypothesis = data.get("drift_hypothesis", "—").replace("_", " ").title()
+
+    feat_html    = "".join(_tag(f) for f in features) if features else "—"
+    actions_html = "".join(_tag(a) for a in actions)  if actions  else "—"
+    urgency_html = _pill(urgency.upper(), _URGENCY_TONE.get(urgency, "muted")) if urgency else "—"
+
+    return (
+        _field("Urgency",     urgency_html) +
+        _field("Hypothesis",  hypothesis) +
+        _field("Drifting",    feat_html) +
+        _field("Recommended", actions_html)
+    )
+
+
+def _render_action(data: dict) -> str:
+    action      = data.get("chosen_action", "—")
+    needs_hil   = data.get("requires_human_approval", False)
+    justification = data.get("justification", "")
+
+    hil_html = (_pill("Approval required", "warn") if needs_hil
+                else _pill("Auto-dispatch", "ok"))
+
+    return (
+        _field("Decision",   _tag(action.replace("_", " ").title())) +
+        _field("Approval",   hil_html) +
+        (_field("Justification",
+                f'<span style="color:var(--muted)">{justification}</span>')
+         if justification else "")
+    )
+
+
+def _render_comms(data: dict) -> str:
+    summary    = data.get("summary", "")
+    actions    = data.get("actions_taken", [])
+    next_steps = data.get("next_steps", "")
+    status     = data.get("investigation_status", "")
+
+    items_html = "".join(f"<li>{a}</li>" for a in actions) if actions else ""
+    actions_html = _field("Actions", f'<ul class="msg-list">{items_html}</ul>') if items_html else ""
+
+    return (
+        (_field("Summary",    f'<span style="color:var(--text)">{summary}</span>') if summary else "") +
+        actions_html +
+        (_field("Next Steps", f'<span style="color:var(--muted)">{next_steps}</span>') if next_steps else "") +
+        (_field("Status",     _pill(status.replace("_", " ").title(), _STATUS_TONE.get(status, "muted"))) if status else "")
+    )
+
+
+_AGENT_RENDERERS = {
+    "triage_agent": (_render_triage, "triage-agent", "🔍 Triage Agent"),
+    "action_agent": (_render_action, "action-agent", "⚡ Action Agent"),
+    "comms_agent":  (_render_comms,  "comms-agent",  "📢 Comms Agent"),
+}
+
+_ROLE_CLASS = {"human": "human", "ai": "ai", "tool": "tool"}
+_ROLE_LABEL = {"human": "Human", "ai": "AI", "tool": "Tool"}
+
+
+def message_bubble(role: str, content: str | list) -> None:
+    import json as _json
+    text = _flatten_content(content) or "(empty)"
+
+    # Structured rendering for known agent roles
+    if role in _AGENT_RENDERERS:
+        renderer, css_class, label = _AGENT_RENDERERS[role]
+        try:
+            body_html = renderer(_json.loads(text))
+            st.markdown(
+                f'<div class="msg {css_class}"><div class="role">{label}</div>'
+                f'{body_html}</div>',
+                unsafe_allow_html=True,
+            )
+            return
+        except (ValueError, TypeError):
+            pass  # fall through to plain text
+
+    # Plain text for human / ai / tool / unknown
+    role_class = _ROLE_CLASS.get(role, "ai")
+    label      = _ROLE_LABEL.get(role, role.replace("_", " ").title())
+    safe = text.replace("<", "&lt;").replace(">", "&gt;")
     st.markdown(
-        f'<div class="msg {role_class}"><div class="role">{role}</div>'
+        f'<div class="msg {role_class}"><div class="role">{label}</div>'
         f'<pre style="white-space:pre-wrap;margin:0;font-family:ui-monospace,monospace;'
         f'color:inherit;font-size:12.5px;">{safe}</pre></div>',
         unsafe_allow_html=True,

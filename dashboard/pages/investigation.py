@@ -190,7 +190,7 @@ def render(inv_id: str) -> None:
         st.divider()
         st.markdown("### Agent messages")
         for msg in messages:
-            T.message_bubble(msg.get("role", "ai"), msg.get("content", "") or "(empty)")
+            T.message_bubble(msg.get("role") or msg.get("type", "ai"), msg.get("content", "") or "(empty)")
 
 
 render(inv_id)

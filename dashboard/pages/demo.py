@@ -246,7 +246,7 @@ def _timeline() -> None:
     if msgs:
         with st.expander(f"Agent messages ({len(msgs)})", expanded=False):
             for m in msgs:
-                T.message_bubble(m.get("role", "ai"), m.get("content", "") or "(empty)")
+                T.message_bubble(m.get("role") or m.get("type", "ai"), m.get("content", "") or "(empty)")
 
 _timeline()
 
