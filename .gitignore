@@ -16,6 +16,7 @@ mlartifacts/
 .pytest_cache/
 training/data/
 *.npy
+!training/fidelity_proba_ref.npy
 project.txt
 DRIFT_TRIAGE_PLAN.md
 brief.md

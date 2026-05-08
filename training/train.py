@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import platform
+import random
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -17,11 +18,9 @@ from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import (
-    GradientBoostingClassifier,
     HistGradientBoostingClassifier,
     RandomForestClassifier,
 )
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import RandomizedSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
@@ -95,9 +94,7 @@ def compare_models(
     X_val: pd.DataFrame, y_val: pd.Series,
 ) -> dict[str, Pipeline]:
     candidates: dict[str, Any] = {
-        "LogisticRegression":   LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42),
         "RandomForest":         RandomForestClassifier(n_estimators=200, class_weight="balanced", random_state=42, n_jobs=-1),
-        "GradientBoosting":     GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, max_depth=4, random_state=42),
         "HistGradientBoosting": HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, max_depth=4, random_state=42),
     }
     trained: dict[str, Pipeline] = {}
@@ -205,6 +202,53 @@ def compute_reference_stats(
     return stats
 
 
+def _save_fidelity_sample(pipeline: Any, out_dir: Path) -> None:
+    """Generate a fixed 100-row sample + reference predictions for CI fidelity test."""
+    ref = json.loads((out_dir / "reference_stats.json").read_text())
+    num = ref["numerics"]
+    cat = ref["categoricals"]
+
+    random.seed(42)
+
+    def _bin(edges: list, pcts: list) -> float:
+        valid = [(i, p) for i, p in enumerate(pcts) if p > 0]
+        idx = random.choices([i for i, _ in valid], weights=[w for _, w in valid])[0]
+        return round(random.uniform(edges[idx], edges[idx + 1]), 4)
+
+    def _cat(props: dict) -> str:
+        cats, weights = zip(*props.items())
+        return random.choices(list(cats), weights=list(weights))[0]
+
+    rows = []
+    for _ in range(100):
+        rows.append({
+            "age":             int(_bin(num["age"]["bin_edges"], num["age"]["reference_pct"])),
+            "campaign":        max(1, int(_bin(num["campaign"]["bin_edges"], num["campaign"]["reference_pct"]))),
+            "previous":        int(_bin(num["previous"]["bin_edges"], num["previous"]["reference_pct"])),
+            "pdays_contacted": random.choices([0, 1], weights=[0.962, 0.038])[0],
+            "emp_var_rate":    _bin(num["emp_var_rate"]["bin_edges"], num["emp_var_rate"]["reference_pct"]),
+            "cons_price_idx":  _bin(num["cons_price_idx"]["bin_edges"], num["cons_price_idx"]["reference_pct"]),
+            "cons_conf_idx":   _bin(num["cons_conf_idx"]["bin_edges"], num["cons_conf_idx"]["reference_pct"]),
+            "euribor3m":       _bin(num["euribor3m"]["bin_edges"], num["euribor3m"]["reference_pct"]),
+            "nr_employed":     _bin(num["nr_employed"]["bin_edges"], num["nr_employed"]["reference_pct"]),
+            "job":             _cat(cat["job"]),
+            "marital":         _cat(cat["marital"]),
+            "education":       _cat(cat["education"]),
+            "default":         _cat(cat["default"]),
+            "housing":         _cat(cat["housing"]),
+            "loan":            _cat(cat["loan"]),
+            "contact":         _cat(cat["contact"]),
+            "month":           _cat(cat["month"]),
+            "day_of_week":     _cat(cat["day_of_week"]),
+            "poutcome":        _cat(cat["poutcome"]),
+        })
+
+    X_sample = pd.DataFrame(rows)
+    proba = pipeline.predict_proba(X_sample)[:, 1]
+    (out_dir / "fidelity_sample.json").write_text(json.dumps(rows))
+    np.save(str(out_dir / "fidelity_proba_ref.npy"), proba)
+
+
 def main() -> None:
     mlflow.set_tracking_uri(MLFLOW_URI)
     mlflow.set_experiment("drift-triage-training")
@@ -255,6 +299,12 @@ def main() -> None:
     model_local = tmp_dir / "model_pipeline.pkl"
     joblib.dump(pipeline, model_local)
     model_hash = hashlib.sha256(model_local.read_bytes()).hexdigest()
+
+    # Persist pkl and a small deterministic sample for the CI fidelity replay test
+    ci_pkl_path = Path(__file__).parent / "model_pipeline.pkl"
+    joblib.dump(pipeline, ci_pkl_path)
+    _save_fidelity_sample(pipeline, Path(__file__).parent)
+    log.info("ci_artifacts.saved", pkl=str(ci_pkl_path))
 
     with mlflow.start_run() as run:
         mlflow.log_params({
